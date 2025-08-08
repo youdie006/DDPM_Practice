@@ -12,3 +12,7 @@ https://github.com/KAIST-Visual-AI-Group/Diffusion-Assignment1-DDPM
 ## 목적
 - DDPM 구현 학습
 - Diffusion 모델 실습
+
+## 진행 상황
+- [x] Task 1: 2D Swiss-Roll DDPM 구현 완료
+- [ ] Task 2: Image Diffusion (진행 예정)
