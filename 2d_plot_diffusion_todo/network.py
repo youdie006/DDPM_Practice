@@ -83,7 +83,23 @@ class SimpleNet(nn.Module):
 
         ######## TODO ########
         # DO NOT change the code outside this part.
-
+        
+        layers = []
+        dims = [dim_in] + dim_hids + [dim_out]  # [입력, 히든들..., 출력] 차원 리스트
+        
+        # TimeLinear 레이어들을 연결하여 네트워크 구성
+        for i in range(len(dims) - 1):
+            layers.append(TimeLinear(dims[i], dims[i+1], num_timesteps))  # 시간 조건부 선형 레이어
+            if i < len(dims) - 2:  # 마지막 레이어 제외
+                layers.append(nn.ReLU())  # 활성화 함수
+        
+        self.layers = nn.ModuleList(layers)  # ModuleList로 저장 (forward에서 순차 처리)
+        
+        # TimeLinear는 시간 t에 따라 다른 변환을 적용하는 레이어
+        # DDPM에서 각 시간 단계마다 다른 노이즈 레벨 처리 필요
+        # 네트워크가 현재 timestep 인식하고 적절한 노이즈 예측
+        # 마지막 레이어는 노이즈 직접 출력하므로 ReLU 미적용
+        
         ######################
         
     def forward(self, x: torch.Tensor, t: torch.Tensor):
@@ -94,9 +110,20 @@ class SimpleNet(nn.Module):
         Args:
             x: the noisy data after t period diffusion
             t: the time that the forward diffusion has been running
-        """
+        """ㅁ
         ######## TODO ########
         # DO NOT change the code outside this part.
-
+        
+        # ModuleList의 레이어들을 순차적으로 적용
+        for layer in self.layers:
+            if isinstance(layer, TimeLinear):  # TimeLinear 레이어인 경우
+                x = layer(x, t)  # (x, t) 두 개 입력 전달
+            else:  # ReLU 같은 activation 레이어인 경우
+                x = layer(x)  # x만 전달
+        
+        # TimeLinear는 (x, t) 두 입력을 받아 시간 조건부 변환 수행
+        # ReLU는 일반적인 activation이므로 x만 받음
+        # 최종 출력은 입력과 같은 차원의 노이즈 예측값
+        
         ######################
         return x

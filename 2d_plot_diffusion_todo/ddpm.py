@@ -87,8 +87,15 @@ class DiffusionModule(nn.Module):
         # DO NOT change the code outside this part.
         # Compute xt.
         alphas_prod_t = extract(self.var_scheduler.alphas_cumprod, t, x0)
-        xt = x0
-
+        
+        # Forward diffusion 수식: q(xt|x0) = N(xt; √(ᾱt)x0, (1-ᾱt)I)
+        # xt = √(ᾱt) * x0 + √(1-ᾱt) * ε
+        xt = alphas_prod_t.sqrt() * x0 + (1 - alphas_prod_t).sqrt() * noise
+        
+        # alphas_prod_t = ᾱt = ∏(i=1 to t) αi
+        # 시간이 지날수록 alphas_prod_t는 0에 가까워짐
+        # t=0: 원본 데이터, t=T: 순수 노이즈
+        
         #######################
 
         return xt
@@ -113,9 +120,24 @@ class DiffusionModule(nn.Module):
         eps_factor = (1 - extract(self.var_scheduler.alphas, t, xt)) / (
             1 - extract(self.var_scheduler.alphas_cumprod, t, xt)
         ).sqrt()
-        eps_theta = self.network(xt, t)
-
-        x_t_prev = xt
+        eps_theta = self.network(xt, t)  # 노이즈 예측
+        
+        # Reverse process 수식: xt-1 = 1/√αt * (xt - (1-αt)/√(1-ᾱt) * εθ(xt, t)) + σt * z
+        alpha_t = extract(self.var_scheduler.alphas, t, xt)
+        
+        # 평균 계산: μθ(xt, t) = 1/√αt * (xt - eps_factor * εθ)
+        mean = (xt - eps_factor * eps_theta) / alpha_t.sqrt()
+        
+        # 분산 추가 (t > 0일 때만, t=0일 때는 deterministic)
+        if t > 0:
+            beta_t = extract(self.var_scheduler.betas, t, xt)
+            noise = torch.randn_like(xt)
+            x_t_prev = mean + beta_t.sqrt() * noise  # σt = √βt
+        else:
+            x_t_prev = mean
+        
+        # eps_factor = (1-αt)/√(1-ᾱt)는 노이즈 제거 강도 조절
+        # t가 클수록 더 많은 노이즈 제거 필요
 
         #######################
         return x_t_prev
@@ -133,7 +155,19 @@ class DiffusionModule(nn.Module):
         ######## TODO ########
         # DO NOT change the code outside this part.
         # sample x0 based on Algorithm 2 of DDPM paper.
-        x0_pred = torch.zeros(shape).to(self.device)
+        
+        # 1단계: 순수 가우시안 노이즈에서 시작 (xT ~ N(0, I))
+        xt = torch.randn(shape).to(self.device)
+        
+        # 2단계: T부터 0까지 역방향으로 denoising
+        for t in reversed(range(self.var_scheduler.num_train_timesteps)):
+            xt = self.p_sample(xt, t)  # xt -> xt-1 한 스텝씩 denoising
+        
+        x0_pred = xt  # 최종 denoised 결과
+        
+        # DDPM Algorithm 2:
+        # xT ~ N(0,I)로 시작 → 반복적으로 p_sample 적용 → x0 생성
+        # 각 스텝에서 조금씩 노이즈 제거하여 최종적으로 깨끗한 샘플 생성
 
         ######################
         return x0_pred
@@ -220,8 +254,22 @@ class DiffusionModule(nn.Module):
             .to(x0.device)
             .long()
         )
-
-        loss = x0.mean()
+        
+        # 1. 랜덤 노이즈 샘플링
+        noise = torch.randn_like(x0)  # ε ~ N(0, I)
+        
+        # 2. Forward process로 노이즈 추가된 xt 생성
+        xt = self.q_sample(x0, t, noise)  # xt = √(ᾱt)*x0 + √(1-ᾱt)*ε
+        
+        # 3. 네트워크로 노이즈 예측
+        noise_pred = self.network(xt, t)  # εθ(xt, t)
+        
+        # 4. MSE loss 계산: L = E[||ε - εθ(xt, t)||²]
+        loss = F.mse_loss(noise_pred, noise)
+        
+        # Simplified loss (Eq. 14 in DDPM):
+        # 실제 노이즈 ε와 예측 노이즈 εθ 간의 MSE
+        # 네트워크가 각 timestep에서 추가된 노이즈를 정확히 예측하도록 학습
 
         ######################
         return loss
