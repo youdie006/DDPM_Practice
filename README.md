@@ -123,6 +123,13 @@ DDPM_Practice/
 │   └── images/                 # 참고 이미지들
 └── requirements.txt            # 필요 패키지 목록
 ```
+## 실행 방법
+
+### Task 1: 2D Swiss-Roll
+Jupyter Notebook 실행: `2d_plot_diffusion_todo/ddpm_tutorial.ipynb`
+
+### Task 2: Image Diffusion  
+학습 스크립트 실행: `image_diffusion_todo/train.py`
 
 ## 참고 자료
 - [Denoising Diffusion Probabilistic Models (DDPM)](https://arxiv.org/abs/2006.11239)
@@ -134,3 +141,4 @@ https://github.com/KAIST-Visual-AI-Group/Diffusion-Assignment1-DDPM
 
 ## 저작권
 모든 저작권은 원본 저장소(KAIST Visual AI Group)에 있음
+
