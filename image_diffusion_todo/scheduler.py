@@ -86,7 +86,33 @@ class DDPMScheduler(BaseScheduler):
         ######## TODO ########
         # DO NOT change the code outside this part.
         # Assignment 1. Implement the DDPM reverse step.
-        sample_prev = None
+        
+        # t를 배치 크기에 맞춰 텐서로 변환
+        batch_size = x_t.shape[0]
+        t_tensor = torch.full((batch_size,), t, device=x_t.device, dtype=torch.long)
+        
+        # 필요한 파라미터들 추출
+        alpha_t = self._get_teeth(self.alphas, t_tensor)  # αt
+        alpha_cumprod_t = self._get_teeth(self.alphas_cumprod, t_tensor)  # ᾱt
+        beta_t = self._get_teeth(self.betas, t_tensor)  # βt
+        
+        # eps_factor = (1-αt)/√(1-ᾱt)
+        eps_factor = (1 - alpha_t) / (1 - alpha_cumprod_t).sqrt()
+        
+        # 평균 계산: μθ = 1/√αt * (xt - eps_factor * εθ)
+        mean = (x_t - eps_factor * eps_theta) / alpha_t.sqrt()
+        
+        # 분산 추가 (t > 0일 때만)
+        if t > 0:
+            sigma_t = self._get_teeth(self.sigmas, t_tensor)  # σt
+            noise = torch.randn_like(x_t)
+            sample_prev = mean + sigma_t * noise  # stochastic sampling
+        else:
+            sample_prev = mean  # t=0에서는 deterministic
+        
+        # Task 1의 p_sample과 동일한 로직
+        # 이미지의 경우 차원만 다름 [B,C,H,W] vs [B,2]
+        
         #######################
         
         return sample_prev
@@ -120,7 +146,17 @@ class DDPMScheduler(BaseScheduler):
         ######## TODO ########
         # DO NOT change the code outside this part.
         # Assignment 1. Implement the DDPM forward step.
-        x_t = None
+        
+        # alphas_cumprod의 t번째 값 추출 (ᾱt)
+        alpha_cumprod_t = self._get_teeth(self.alphas_cumprod, t)  # [B] -> [B,1,1,1]
+        
+        # Forward diffusion 수식: q(xt|x0) = N(xt; √(ᾱt)x0, (1-ᾱt)I)
+        # xt = √(ᾱt) * x0 + √(1-ᾱt) * ε
+        x_t = alpha_cumprod_t.sqrt() * x_0 + (1 - alpha_cumprod_t).sqrt() * eps
+        
+        # Task 1의 q_sample과 동일한 로직
+        # _get_teeth로 4D 텐서에 맞게 shape 조정
+        # 이미지 [B,C,H,W]와 브로드캐스팅 가능
         #######################
 
         return x_t, eps
