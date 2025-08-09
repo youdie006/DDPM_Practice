@@ -18,8 +18,28 @@ class DiffusionModule(nn.Module):
         # DO NOT change the code outside this part.
         # compute noise matching loss.
         B = x0.shape[0]
-        timestep = self.var_scheduler.uniform_sample_t(B, self.device)        
-        loss = x0.mean()
+        timestep = self.var_scheduler.uniform_sample_t(B, self.device)
+        
+        # 1. 랜덤 노이즈 샘플링
+        if noise is None:
+            noise = torch.randn_like(x0)  # ε ~ N(0, I)
+        
+        # 2. Forward process로 노이즈 추가 
+        x_t, eps = self.var_scheduler.add_noise(x0, timestep, noise)  # xt = √(ᾱt)*x0 + √(1-ᾱt)*ε
+        
+        # 3. 네트워크로 노이즈 예측 (class_label은 conditional diffusion용)
+        if class_label is not None:
+            eps_theta = self.network(x_t, timestep=timestep, class_label=class_label)
+        else:
+            eps_theta = self.network(x_t, timestep=timestep)  # εθ(xt, t)
+        
+        # 4. MSE loss 계산: L = E[||ε - εθ(xt, t)||²]
+        loss = F.mse_loss(eps_theta, eps)
+        
+        # Task 1의 compute_loss와 동일한 로직
+        # uniform_sample_t로 랜덤 timestep 샘플링
+        # 이미지용으로 차원만 다름 [B,C,H,W]
+        
         ######################
         return loss
     

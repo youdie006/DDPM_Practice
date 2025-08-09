@@ -110,7 +110,7 @@ class SimpleNet(nn.Module):
         Args:
             x: the noisy data after t period diffusion
             t: the time that the forward diffusion has been running
-        """ㅁ
+        """
         ######## TODO ########
         # DO NOT change the code outside this part.
         
